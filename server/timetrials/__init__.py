@@ -13,9 +13,11 @@ def create_app(config_object=Config):
     db.init_app(app)
 
     from .api import api_bp
+    from .auth import auth_bp
     from .cli import register_cli
 
     app.register_blueprint(api_bp, url_prefix="/api")
+    app.register_blueprint(auth_bp)
     register_cli(app)
 
     return app

@@ -1,6 +1,7 @@
 
-from flask import Blueprint, abort, current_app, jsonify, request
+from flask import Blueprint, abort, current_app, g, jsonify, request
 
+from .auth import create_link_code, poll_link_code, token_required, token_user
 from .extensions import db
 from .models import Category, Run, best_runs_query, rank_for_run
 
@@ -10,6 +11,35 @@ api_bp = Blueprint("api", __name__)
 @api_bp.errorhandler(404)
 def not_found(_error):
     return jsonify({"error": "not found"}), 404
+
+
+@api_bp.post("/auth/link/start")
+def link_start():
+    payload = request.get_json(silent=True) or {}
+    record = create_link_code(str(payload.get("client", "")))
+    return jsonify(
+        {
+            "code": record.code,
+            "url": f"{current_app.config['PUBLIC_URL']}/link?code={record.code}",
+            "expires_in": current_app.config["LINK_CODE_TTL_SECONDS"],
+        }
+    )
+
+
+@api_bp.get("/auth/link/poll")
+def link_poll():
+    code = (request.args.get("code") or "").strip().upper()
+    
+    if not code:
+        return jsonify({"error": "code required"}), 400
+    
+    return jsonify(poll_link_code(code))
+
+
+@api_bp.get("/me")
+@token_required
+def me():
+    return jsonify(g.user.to_dict())
 
 
 @api_bp.get("/categories")
@@ -51,7 +81,7 @@ def leaderboard(category_id):
     limit = requested_limit()
     if limit is None:
         return jsonify({"error": "invalid limit"}), 400
-    return jsonify(board_payload(category, limit, None))
+    return jsonify(board_payload(category, limit, token_user()))
 
 
 @api_bp.get("/leaderboards")
@@ -59,5 +89,6 @@ def leaderboards():
     limit = requested_limit()
     if limit is None:
         return jsonify({"error": "invalid limit"}), 400
+    user = token_user()
     rows = Category.query.filter_by(active=True).order_by(Category.sort_order).all()
-    return jsonify({"boards": {category.id: board_payload(category, limit, None) for category in rows}})
+    return jsonify({"boards": {category.id: board_payload(category, limit, user) for category in rows}})

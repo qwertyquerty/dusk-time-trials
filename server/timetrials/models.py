@@ -19,10 +19,42 @@ class User(db.Model):
     avatar: Mapped[str | None] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
+    tokens: Mapped[list["ApiToken"]] = relationship(back_populates="user")
     runs: Mapped[list["Run"]] = relationship(back_populates="user")
 
     def to_dict(self):
         return {"id": self.id, "username": self.username, "discord_id": self.discord_id}
+
+
+class ApiToken(db.Model):
+    __tablename__ = "api_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(64), default="game", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    user: Mapped[User] = relationship(back_populates="tokens")
+
+
+class LinkCode(db.Model):
+    __tablename__ = "link_codes"
+
+    code: Mapped[str] = mapped_column(String(12), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    client: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    token_plain: Mapped[str | None] = mapped_column(String(128))
+    delivered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    user: Mapped[User | None] = relationship()
+
+    def expired(self):
+        return utcnow() >= self.expires_at
 
 
 class Category(db.Model):
